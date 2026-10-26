@@ -1,0 +1,16 @@
+# What to fetch. Edit this, then run research/01_fetch_data.ipynb top to bottom.
+
+# data.binance.vision: every USDT perp that ever traded, delisted included (no survivorship
+# bias). The model tops the store up with the latest days itself (python -m betafunding refresh).
+
+# Every USDT symbol in the archive, minus today's non-crypto contracts (Binance
+# underlyingType != COIN: equities, commodities, indices), the delisted indices, stablecoins
+# and gold. Liquidity is filtered per day in research_config (risk.min_dollar_volume), using
+# trailing volume only.
+archive:
+  start: "2024-01"
+  end: "2026-09"                     # last complete month; the archive has no partial months
+  timeframe: "1d"
+  exclude: [USDCUSDT, BUSDUSDT, TUSDUSDT, FDUSDUSDT, USDPUSDT, PAXGUSDT, XAUTUSDT,
+            BTCDOMUSDT, DEFIUSDT, FOOTBALLUSDT, BLUEBIRDUSDT, ALLUSDT]
+  data_root: data/binance_archive

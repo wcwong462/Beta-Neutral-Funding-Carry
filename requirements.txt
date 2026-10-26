@@ -1,0 +1,10 @@
+ccxt>=4.3
+pandas>=2.0
+numpy>=1.24
+pyarrow>=23         # one interpreter for writing and reading the parquet
+pyyaml>=6
+cvxpy>=1.4
+scikit-learn>=1.3  # Ledoit-Wolf covariance (risk.model: lw)
+matplotlib>=3.7
+jupyter
+nbconvert>=7

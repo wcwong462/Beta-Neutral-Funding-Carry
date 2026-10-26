@@ -1,0 +1,5 @@
+# Research data: re-fetched by research/01_fetch_data.ipynb
+data/
+.ipynb_checkpoints/
+__pycache__/
+state/

@@ -1,0 +1,88 @@
+# The strategy. Every setting the model and the research notebooks read; the defaults are the
+# final strategy. The original design is betafunding.config.ORIGINAL_SPEC applied on top.
+
+# Daily bars written by research/01: every USDT perp incl. delisted (no survivorship bias).
+data:
+  root: data/binance_archive
+  timeframe: 1d
+
+# BTC and ETH define the market (beta.type says how) and are traded as the hedge. With
+# trade_benchmarks: false neutrality has to come from the alts alone.
+benchmarks: [BTC, ETH]
+trade_benchmarks: true
+
+beta:
+  type: joint                 # joint   = one regression on BTC and ETH, neutral to each
+                              # btc | eth = single factor
+                              # combined = single factor on (BTC + ETH) / 2
+                              # adaptive = per name, BTC or ETH beta, whichever has higher R^2
+  window_days: 30             # trailing days of returns (all bars of the data's timeframe)
+  min_days: 15                # an asset with fewer is not tradable yet
+  tolerance: 0.02             # |net beta| <= this, per factor
+  shrink_prior_days: null     # e.g. 60: pull the window_days beta toward the 60d beta by
+                              # inverse sampling variance (noisy names move most). null = off
+  clip: null                  # e.g. 4.0: bound |beta|. null = off
+
+funding:
+  forecast: ar1               # ar1 | ema
+  ema_halflife: 7             # days; ema forecast = EMA of realised daily funding
+  ar_window: 30               # days; ar1 forecast = rolling AR(1), f(t+1) = a + b f(t)
+  ar_min_days: 15
+  require_sign: true          # shorts only where forecast > min_apy, longs only where < -min_apy
+  min_apy: 10.0               # APY %. Funding often sits at the +10.95% APY interest floor
+                              # (0.01%/8h), which the BTC/ETH hedge pays too, so carry net of
+                              # the hedge only starts above it
+  min_apy_long: 300.0         # per-side floors (APY %), null = min_apy. Longs need forecast <
+  min_apy_short: 300.0        #   -min_apy_long, shorts > min_apy_short. 1.0e+9 switches a side off
+  drift_adjust: false         # subtract the expected price drift of each forecast bucket, learnt
+  drift_prior: 200            #   on past days only (price_drift); prior = shrinkage toward 0
+
+selection:
+  mode: threshold             # threshold = every tradable name, gated by the sign rule
+                              # topk = only the k highest and k lowest forecasts each day
+  k: 5
+
+risk:
+  model: diag                 # diag   = residual variance per name (no correlations)
+                              # sample = rolling sample covariance (short/long blend)
+                              # lw     = Ledoit-Wolf shrinkage of the sample
+                              # ewma   = RiskMetrics, lambda 0.94
+  cov:                        # used when model != diag
+    window_days: 60
+    short_days: 7             # sample only: short window, blended with short_weight
+    short_weight: 0.5
+    ewma_lambda: 0.94
+  lambda: 10.0                # risk penalty (daily units); 0 = pure LP
+  max_gross: 2.0              # sum |w|
+  max_weight: 0.20            # |w_i|
+  min_dollar_volume: 2.0e+7   # trailing mean daily USD volume to be tradable ($20m)
+  volume_days: 30             # window of that mean
+  top_n: null                 # e.g. 30: keep the N most traded each day (BTC, ETH always in)
+  vol_cap: null               # e.g. 0.01: |w_i| <= vol_cap / daily vol_i (risk budget per name)
+  stop_loss: 0.20             # close after a 20% adverse move since entry (null = off)
+  take_profit: null           # e.g. 1.0: close after a 100% favourable move
+  cooldown_days: 3            # a stopped name stays out this long
+
+turnover:
+  gamma: 0.0010               # penalty per unit |dw| inside the optimiser (10 bps)
+  horizon_days: 5             # gamma is paid once, carry is earned every day held: the objective
+                              # compares one day of carry with gamma / horizon_days
+  min_trade: 0.03             # |dw| below this -> hold the old weight, re-solve the rest
+  kappa: 0.0                  # quadratic turnover penalty kappa/2 ||w - w_old||^2
+  rebalance_days: 1           # 1 = decide every day; 7 / 30 = calendar rebalancing, drift between
+
+cost_bps: 5.0                 # realised one-way fee per unit traded (Binance taker ~4-5 bps)
+
+backtest:
+  start: "2024-03-01"         # 2024-01 data start + beta.min_days of history
+  end: null
+
+# Walk-forward: choose a candidate on past days, trade it on the next block.
+walkforward:
+  min_train_days: 120
+  test_days: 60
+  mode: expanding             # expanding | rolling (train = last min_train_days)
+  score: sharpe               # sharpe | sortino | calmar | composite (0.4 so + 0.3 sh + 0.3 ca)
+
+# Daily plan (python -m betafunding plan): equity used when state/book.json does not exist.
+equity_usd: 10000
